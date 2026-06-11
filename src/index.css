@@ -1,0 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #2D3748;
+  background: linear-gradient(135deg, #FFFAF5 0%, #F5E6E0 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cinzel', serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5E6E0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E8C4A0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A961;
+}
+
+/* Selection */
+::selection {
+  background: rgba(232, 196, 160, 0.4);
+}
+
+/* Canvas background grid */
+.canvas-grid {
+  background-image: 
+    linear-gradient(rgba(201, 169, 97, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 97, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Button base style */
+.btn-primary {
+  @apply px-6 py-2.5 bg-gradient-to-r from-rose-gold to-champagne text-white rounded-lg font-medium transition-all duration-300 hover:shadow-gold hover:-translate-y-0.5 active:translate-y-0;
+}
+
+.btn-secondary {
+  @apply px-6 py-2.5 bg-white border-2 border-rose-gold text-champagne-dark rounded-lg font-medium transition-all duration-300 hover:bg-rose-light hover:border-champagne;
+}
+
+.btn-ghost {
+  @apply px-4 py-2 text-gray-600 rounded-lg font-medium transition-all duration-300 hover:bg-rose-light/50;
+}
+
+/* Card style */
+.card {
+  @apply bg-white/90 backdrop-blur-sm rounded-xl shadow-soft border border-rose-gold/20 p-6 transition-all duration-300 hover:shadow-elevated;
+}
+
+/* Input style */
+.input-field {
+  @apply w-full px-4 py-2.5 bg-white border-2 border-rose-gold/30 rounded-lg focus:border-champagne focus:outline-none transition-all duration-200;
+}
+
+/* Toggle switch */
+.toggle-switch {
+  @apply relative w-14 h-7 bg-gray-200 rounded-full cursor-pointer transition-colors duration-300;
+}
+
+.toggle-switch.active {
+  @apply bg-champagne;
+}
+
+.toggle-switch::after {
+  content: '';
+  @apply absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300;
+}
+
+.toggle-switch.active::after {
+  @apply translate-x-7;
+}
+
+/* Animation utilities */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+
+/* Dragging state */
+.dragging {
+  opacity: 0.8;
+  transform: scale(1.05);
+  cursor: grabbing !important;
+}
+
+.drop-zone-active {
+  @apply border-2 border-dashed border-champagne bg-champagne/10;
+}
