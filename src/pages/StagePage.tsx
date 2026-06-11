@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   Mic2,
   User,
@@ -55,7 +55,7 @@ export default function StagePage() {
     setIsResizing(true);
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -79,15 +79,26 @@ export default function StagePage() {
         height: newHeight,
       });
     }
-  };
+  }, [isDragging, isResizing, dragOffset, stageConfig]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
     setIsResizing(false);
     
     const stageTodo = plan.todos.find((t) => t.category === 'stage' && !t.completed);
     if (stageTodo) toggleTodo(stageTodo.id);
-  };
+  }, [plan.todos, toggleTodo]);
+
+  useEffect(() => {
+    if (isDragging || isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
   const handleBrideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -114,11 +125,7 @@ export default function StagePage() {
   };
 
   return (
-    <div
-      className="h-full flex"
-      onMouseMove={isDragging || isResizing ? handleMouseMove : undefined}
-      onMouseUp={isDragging || isResizing ? handleMouseUp : undefined}
-    >
+    <div className="h-full flex">
       <div className="w-80 bg-white/90 backdrop-blur-sm border-r border-rose-gold/20 flex flex-col">
         <div className="p-4 border-b border-rose-gold/20">
           <h3 className="font-display text-lg font-semibold text-champagne-dark mb-1 flex items-center gap-2">

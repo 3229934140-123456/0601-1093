@@ -390,18 +390,23 @@ export const useWeddingStore = create<WeddingStore>()(
           const plan = state.plans[state.currentPlanId];
           const guest = plan.guests.find((g) => g.id === guestId);
           const oldSeatId = guest?.seatId;
+          
+          const existingGuestInSeat = plan.guests.find((g) => g.seatId === seatId && g.id !== guestId);
 
           return {
             plans: {
               ...state.plans,
               [state.currentPlanId]: {
                 ...plan,
-                guests: plan.guests.map((g) =>
-                  g.id === guestId ? { ...g, seatId } : g
-                ),
+                guests: plan.guests.map((g) => {
+                  if (g.id === guestId) return { ...g, seatId };
+                  if (existingGuestInSeat && g.id === existingGuestInSeat.id) return { ...g, seatId: undefined };
+                  return g;
+                }),
                 furniture: plan.furniture.map((f) => {
                   if (f.id === seatId) return { ...f, guestId };
                   if (f.id === oldSeatId) return { ...f, guestId: undefined };
+                  if (existingGuestInSeat && f.id === seatId) return { ...f, guestId };
                   return f;
                 }),
                 updatedAt: new Date().toISOString(),

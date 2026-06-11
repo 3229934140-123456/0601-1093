@@ -121,4 +121,5 @@ export interface DecorationTemplate {
   icon: string;
   defaultPrice: number;
   defaultColor: string;
+  size?: number;
 }

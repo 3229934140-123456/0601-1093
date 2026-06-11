@@ -7,12 +7,14 @@ import DecorationPage from '@/pages/DecorationPage';
 import CeremonyPage from '@/pages/CeremonyPage';
 import PreviewPage from '@/pages/PreviewPage';
 import SharePage from '@/pages/SharePage';
+import GuestInvitePage from '@/pages/GuestInvitePage';
 
 export default function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/venue" replace />} />
+        <Route path="/invite/:planId" element={<GuestInvitePage />} />
         <Route element={<Layout />}>
           <Route path="/venue" element={<VenuePage />} />
           <Route path="/seating" element={<SeatingPage />} />

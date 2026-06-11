@@ -43,7 +43,6 @@ export default function SeatingPage() {
     assignGuestToSeat,
     unassignGuest,
     setEntrancePath,
-    entrancePath,
     isDrawingPath,
     setDrawingPath,
     activeTool,

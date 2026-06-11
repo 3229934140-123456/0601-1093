@@ -44,6 +44,7 @@ export default function DecorationPage() {
     selectedDecorationId,
     setBackgroundMusic,
     setMusicVolume,
+    setTimeMode,
     toggleTodo,
   } = useWeddingStore();
 
@@ -212,6 +213,7 @@ export default function DecorationPage() {
               <label className="text-sm text-gray-600 block mb-2">场景氛围</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
+                  onClick={() => setTimeMode('day')}
                   className={cn(
                     'p-3 rounded-lg border-2 transition-all',
                     timeMode === 'day'
@@ -223,6 +225,7 @@ export default function DecorationPage() {
                   <p className="text-xs text-center">明亮</p>
                 </button>
                 <button
+                  onClick={() => setTimeMode('night')}
                   className={cn(
                     'p-3 rounded-lg border-2 transition-all',
                     timeMode === 'night'

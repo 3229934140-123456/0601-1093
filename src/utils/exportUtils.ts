@@ -11,6 +11,11 @@ export const exportToCSV = (plan: WeddingPlan, budget: number): void => {
   rows.push(['场地类型', SCENE_NAMES[plan.sceneType]]);
   rows.push(['时间模式', TIME_MODE_NAMES[plan.timeMode]]);
   rows.push(['预算总额', `¥${budget.toLocaleString()}`]);
+  rows.push(['新娘照片', plan.brideImage ? '已上传' : '未上传']);
+  rows.push(['新郎照片', plan.groomImage ? '已上传' : '未上传']);
+  rows.push(['背景音乐', plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置')]);
+  rows.push(['入场路线', plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置']);
+  rows.push(['司仪台', `位置(${plan.stageConfig.podiumX}, ${plan.stageConfig.podiumY}) 样式: ${plan.stageConfig.podiumStyle}`]);
   rows.push([]);
   
   rows.push(['=== 家具清单 ===']);
@@ -67,6 +72,14 @@ export const exportToExcel = (plan: WeddingPlan, budget: number): void => {
     ['预算总额', budget],
     ['宾客总数', plan.guests.length],
     ['VIP宾客', plan.guests.filter((g) => g.isVip).length],
+    ['新娘照片', plan.brideImage ? '已上传' : '未上传'],
+    ['新郎照片', plan.groomImage ? '已上传' : '未上传'],
+    ['背景音乐', plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置')],
+    ['入场路线', plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置'],
+    ['司仪台位置', `X: ${plan.stageConfig.podiumX}, Y: ${plan.stageConfig.podiumY}`],
+    ['司仪台样式', plan.stageConfig.podiumStyle],
+    ['舞台尺寸', `宽: ${plan.stageConfig.width}, 高: ${plan.stageConfig.height}`],
+    ['T型舞台', plan.stageConfig.hasTStage ? `是 (长度: ${plan.stageConfig.tStageLength})` : '否'],
   ];
   const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, ws1, '概要');
@@ -133,6 +146,31 @@ export const exportToPDF = (plan: WeddingPlan, budget: number): void => {
   doc.text(`预算总额: ¥${budget.toLocaleString()}`, 20, y);
   y += 7;
   doc.text(`宾客总数: ${plan.guests.length}人 (VIP: ${plan.guests.filter(g => g.isVip).length}人)`, 20, y);
+  y += 7;
+  doc.text(`新娘照片: ${plan.brideImage ? '已上传' : '未上传'}`, 20, y);
+  y += 7;
+  doc.text(`新郎照片: ${plan.groomImage ? '已上传' : '未上传'}`, 20, y);
+  y += 7;
+  doc.text(`背景音乐: ${plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置')}`, 20, y);
+  y += 7;
+  doc.text(`入场路线: ${plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置'}`, 20, y);
+  y += 7;
+  doc.text(`司仪台: 位置(${plan.stageConfig.podiumX}, ${plan.stageConfig.podiumY}) 样式: ${plan.stageConfig.podiumStyle}`, 20, y);
+  y += 7;
+  doc.text(`舞台尺寸: 宽${plan.stageConfig.width} x 高${plan.stageConfig.height}`, 20, y);
+  y += 7;
+  doc.text(`T型舞台: ${plan.stageConfig.hasTStage ? `是 (长度: ${plan.stageConfig.tStageLength})` : '否'}`, 20, y);
+  y += 12;
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  const completeStatus = [
+    plan.brideImage && plan.groomImage,
+    plan.backgroundMusic,
+    plan.entrancePath.length > 0,
+    plan.furniture.length > 0,
+  ].filter(Boolean).length;
+  doc.text(`方案完整度: ${completeStatus}/4 项已完成`, 20, y);
   y += 15;
   
   doc.setFontSize(12);
@@ -250,7 +288,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 export const generateShareLink = (planId: string): string => {
   const baseUrl = window.location.origin + window.location.pathname;
-  return `${baseUrl}?plan=${planId}&preview=true`;
+  return `${baseUrl}invite/${planId}`;
 };
 
 export const copyToClipboard = async (text: string): Promise<boolean> => {

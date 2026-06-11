@@ -217,7 +217,7 @@ function PlanCard({
 }
 
 interface BudgetCompareModalProps {
-  plans: WeddingPlan[];
+  plans: Record<string, WeddingPlan>;
   comparePlanIds: string[];
   onClose: () => void;
 }
