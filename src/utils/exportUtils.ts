@@ -3,6 +3,78 @@ import { jsPDF } from 'jspdf';
 import type { WeddingPlan, Furniture, Decoration, Guest, CeremonyStep } from '@/store/types';
 import { FURNITURE_TEMPLATES, DECORATION_TEMPLATES, SCENE_NAMES, TIME_MODE_NAMES } from '@/constants/templates';
 
+export const encodePlanData = (plan: WeddingPlan): string => {
+  try {
+    const dataToEncode = {
+      id: plan.id,
+      name: plan.name,
+      sceneType: plan.sceneType,
+      timeMode: plan.timeMode,
+      stageConfig: plan.stageConfig,
+      furniture: plan.furniture,
+      guests: plan.guests.map(({ id, name, seatId, isVip }) => ({ id, name, seatId, isVip })),
+      decorations: plan.decorations,
+      ceremonySteps: plan.ceremonySteps,
+      todos: plan.todos,
+      entrancePath: plan.entrancePath,
+      musicName: plan.musicName,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt,
+    };
+    
+    const jsonStr = JSON.stringify(dataToEncode);
+    const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (error) {
+    console.error('Failed to encode plan data:', error);
+    return '';
+  }
+};
+
+export const decodePlanData = (encoded: string): Partial<WeddingPlan> | null => {
+  try {
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padLen = (4 - (base64.length % 4)) % 4;
+    const paddedBase64 = base64 + '='.repeat(padLen);
+    const jsonStr = decodeURIComponent(escape(atob(paddedBase64)));
+    return JSON.parse(jsonStr) as Partial<WeddingPlan>;
+  } catch (error) {
+    console.error('Failed to decode plan data:', error);
+    return null;
+  }
+};
+
+export const generateShareLink = (plan: WeddingPlan): string => {
+  const baseUrl = window.location.origin;
+  const encodedData = encodePlanData(plan);
+  return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}`;
+};
+
+interface CompletenessCheck {
+  category: string;
+  item: string;
+  completed: boolean;
+  status: string;
+}
+
+export const getCompletenessChecks = (plan: WeddingPlan): CompletenessCheck[] => {
+  return [
+    { category: '新人形象', item: '新娘照片', completed: !!plan.brideImage, status: plan.brideImage ? '已完成' : '待上传' },
+    { category: '新人形象', item: '新郎照片', completed: !!plan.groomImage, status: plan.groomImage ? '已完成' : '待上传' },
+    { category: '场地布置', item: '场地选择', completed: !!plan.sceneType, status: plan.sceneType ? '已完成' : '待选择' },
+    { category: '场地布置', item: '时间模式', completed: !!plan.timeMode, status: plan.timeMode ? '已完成' : '待选择' },
+    { category: '场地布置', item: '入场路线', completed: plan.entrancePath.length > 0, status: plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '待设置' },
+    { category: '舞台配置', item: '舞台尺寸', completed: plan.stageConfig.width > 0 && plan.stageConfig.height > 0, status: '已配置' },
+    { category: '舞台配置', item: '司仪台', completed: !!plan.stageConfig.podiumStyle, status: `样式: ${plan.stageConfig.podiumStyle || '默认'}` },
+    { category: '家具布置', item: '家具布置', completed: plan.furniture.length > 0, status: plan.furniture.length > 0 ? `${plan.furniture.length}件` : '待布置' },
+    { category: '家具布置', item: '宾客座位', completed: plan.guests.some(g => g.seatId), status: `${plan.guests.filter(g => g.seatId).length}/${plan.guests.length}人已安排` },
+    { category: '装饰布置', item: '装饰布置', completed: plan.decorations.length > 0, status: plan.decorations.length > 0 ? `${plan.decorations.length}件` : '待布置' },
+    { category: '音乐音效', item: '背景音乐', completed: !!plan.backgroundMusic || !!plan.musicName, status: plan.musicName || (plan.backgroundMusic ? '已上传' : '待设置') },
+    { category: '仪式流程', item: '仪式流程', completed: plan.ceremonySteps.length > 0, status: plan.ceremonySteps.length > 0 ? `${plan.ceremonySteps.length}个环节` : '待编辑' },
+    { category: '宾客管理', item: '宾客名单', completed: plan.guests.length > 0, status: plan.guests.length > 0 ? `${plan.guests.length}人` : '待添加' },
+  ];
+};
+
 export const exportToCSV = (plan: WeddingPlan, budget: number): void => {
   const rows: string[][] = [];
   
@@ -84,21 +156,44 @@ export const exportToExcel = (plan: WeddingPlan, budget: number): void => {
   const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, ws1, '概要');
   
+  const completenessData = [
+    ['分类', '检查项', '状态', '完成情况'],
+    ...getCompletenessChecks(plan).map((c) => [
+      c.category,
+      c.item,
+      c.status,
+      c.completed ? '已完成' : '待完成',
+    ]),
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(completenessData);
+  XLSX.utils.book_append_sheet(wb, ws2, '完整度检查');
+  
+  const todoData = [
+    ['分类', '事项', '完成状态'],
+    ...plan.todos.map((t) => [
+      t.category,
+      t.title,
+      t.completed ? '已完成' : '待完成',
+    ]),
+  ];
+  const ws3 = XLSX.utils.aoa_to_sheet(todoData);
+  XLSX.utils.book_append_sheet(wb, ws3, '待办事项');
+  
   const furnitureData = [
     ['类型', '名称', '数量', '单价', '小计'],
     ...summarizeFurniture(plan.furniture).map((i) => [i.type, i.name, i.count, i.price, i.total]),
     ['', '', '', '家具小计', furnitureSummaryTotal(plan.furniture)],
   ];
-  const ws2 = XLSX.utils.aoa_to_sheet(furnitureData);
-  XLSX.utils.book_append_sheet(wb, ws2, '家具清单');
+  const ws4 = XLSX.utils.aoa_to_sheet(furnitureData);
+  XLSX.utils.book_append_sheet(wb, ws4, '家具清单');
   
   const decorationData = [
     ['类型', '名称', '数量', '单价', '小计'],
     ...summarizeDecorations(plan.decorations).map((i) => [i.type, i.name, i.count, i.price, i.total]),
     ['', '', '', '装饰小计', decorationSummaryTotal(plan.decorations)],
   ];
-  const ws3 = XLSX.utils.aoa_to_sheet(decorationData);
-  XLSX.utils.book_append_sheet(wb, ws3, '装饰清单');
+  const ws5 = XLSX.utils.aoa_to_sheet(decorationData);
+  XLSX.utils.book_append_sheet(wb, ws5, '装饰清单');
   
   const guestData = [
     ['序号', '姓名', 'VIP', '座位号'],
@@ -109,8 +204,8 @@ export const exportToExcel = (plan: WeddingPlan, budget: number): void => {
       plan.furniture.find((f) => f.id === g.seatId)?.label || '未分配',
     ]),
   ];
-  const ws4 = XLSX.utils.aoa_to_sheet(guestData);
-  XLSX.utils.book_append_sheet(wb, ws4, '宾客名单');
+  const ws6 = XLSX.utils.aoa_to_sheet(guestData);
+  XLSX.utils.book_append_sheet(wb, ws6, '宾客名单');
   
   const ceremonyData = [
     ['序号', '环节', '主持人', '时长(分钟)', '说明'],
@@ -118,8 +213,8 @@ export const exportToExcel = (plan: WeddingPlan, budget: number): void => {
       .sort((a, b) => a.order - b.order)
       .map((s, i) => [i + 1, s.title, s.host, s.durationMin, s.description]),
   ];
-  const ws5 = XLSX.utils.aoa_to_sheet(ceremonyData);
-  XLSX.utils.book_append_sheet(wb, ws5, '仪式流程');
+  const ws7 = XLSX.utils.aoa_to_sheet(ceremonyData);
+  XLSX.utils.book_append_sheet(wb, ws7, '仪式流程');
   
   XLSX.writeFile(wb, `${plan.name}_布置清单.xlsx`);
 };
@@ -139,42 +234,142 @@ export const exportToPDF = (plan: WeddingPlan, budget: number): void => {
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`生成日期: ${new Date().toLocaleDateString('zh-CN')}`, 20, y);
-  y += 7;
-  doc.text(`场地类型: ${SCENE_NAMES[plan.sceneType]} / ${TIME_MODE_NAMES[plan.timeMode]}`, 20, y);
-  y += 7;
-  doc.text(`预算总额: ¥${budget.toLocaleString()}`, 20, y);
-  y += 7;
-  doc.text(`宾客总数: ${plan.guests.length}人 (VIP: ${plan.guests.filter(g => g.isVip).length}人)`, 20, y);
-  y += 7;
-  doc.text(`新娘照片: ${plan.brideImage ? '已上传' : '未上传'}`, 20, y);
-  y += 7;
-  doc.text(`新郎照片: ${plan.groomImage ? '已上传' : '未上传'}`, 20, y);
-  y += 7;
-  doc.text(`背景音乐: ${plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置')}`, 20, y);
-  y += 7;
-  doc.text(`入场路线: ${plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置'}`, 20, y);
-  y += 7;
-  doc.text(`司仪台: 位置(${plan.stageConfig.podiumX}, ${plan.stageConfig.podiumY}) 样式: ${plan.stageConfig.podiumStyle}`, 20, y);
-  y += 7;
-  doc.text(`舞台尺寸: 宽${plan.stageConfig.width} x 高${plan.stageConfig.height}`, 20, y);
-  y += 7;
-  doc.text(`T型舞台: ${plan.stageConfig.hasTStage ? `是 (长度: ${plan.stageConfig.tStageLength})` : '否'}`, 20, y);
-  y += 12;
-
+  doc.setTextColor(0, 0, 0);
+  
+  const addInfoLine = (label: string, value: string, isCompleted?: boolean) => {
+    doc.text(label, 20, y);
+    if (isCompleted !== undefined) {
+      if (isCompleted) {
+        doc.setTextColor(34, 197, 94);
+      } else {
+        doc.setTextColor(239, 68, 68);
+      }
+    }
+    doc.text(value, 170, y, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    y += 7;
+  };
+  
+  addInfoLine(`生成日期: ${new Date().toLocaleDateString('zh-CN')}`, '');
+  y += 3;
+  
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  const completeStatus = [
-    plan.brideImage && plan.groomImage,
-    plan.backgroundMusic,
-    plan.entrancePath.length > 0,
-    plan.furniture.length > 0,
-  ].filter(Boolean).length;
-  doc.text(`方案完整度: ${completeStatus}/4 项已完成`, 20, y);
-  y += 15;
+  doc.text('基本信息', 20, y);
+  y += 8;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  
+  addInfoLine('场地类型:', `${SCENE_NAMES[plan.sceneType]} / ${TIME_MODE_NAMES[plan.timeMode]}`, true);
+  addInfoLine('预算总额:', `¥${budget.toLocaleString()}`, true);
+  addInfoLine('宾客总数:', `${plan.guests.length}人 (VIP: ${plan.guests.filter(g => g.isVip).length}人)`, plan.guests.length > 0);
+  addInfoLine('新娘照片:', plan.brideImage ? '已上传' : '未上传', !!plan.brideImage);
+  addInfoLine('新郎照片:', plan.groomImage ? '已上传' : '未上传', !!plan.groomImage);
+  addInfoLine('背景音乐:', plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置'), !!(plan.backgroundMusic || plan.musicName));
+  addInfoLine('入场路线:', plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置', plan.entrancePath.length > 0);
+  addInfoLine('司仪台:', `位置(${plan.stageConfig.podiumX}, ${plan.stageConfig.podiumY}) 样式: ${plan.stageConfig.podiumStyle}`, true);
+  addInfoLine('舞台尺寸:', `宽${plan.stageConfig.width} x 高${plan.stageConfig.height}`, true);
+  addInfoLine('T型舞台:', plan.stageConfig.hasTStage ? `是 (长度: ${plan.stageConfig.tStageLength})` : '否', true);
+  y += 8;
   
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('准备完整度检查', 20, y);
+  y += 10;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  
+  const completenessChecks = getCompletenessChecks(plan);
+  const completedCount = completenessChecks.filter(c => c.completed).length;
+  const progress = Math.round((completedCount / completenessChecks.length) * 100);
+  
+  doc.setTextColor(0, 0, 0);
+  doc.text(`整体进度: ${progress}% (${completedCount}/${completenessChecks.length}项)`, 20, y);
+  y += 8;
+  
+  let currentCategory = '';
+  completenessChecks.forEach((check) => {
+    if (check.category !== currentCategory) {
+      y += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 140, 100);
+      doc.text(`【${check.category}】`, 25, y);
+      y += 7;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      currentCategory = check.category;
+    }
+    
+    if (check.completed) {
+      doc.setTextColor(34, 197, 94);
+      doc.text('✓', 25, y);
+    } else {
+      doc.setTextColor(239, 68, 68);
+      doc.text('✗', 25, y);
+    }
+    doc.setTextColor(0, 0, 0);
+    doc.text(check.item, 32, y);
+    
+    if (check.completed) {
+      doc.setTextColor(34, 197, 94);
+    } else {
+      doc.setTextColor(239, 68, 68);
+    }
+    doc.text(check.status, 170, y, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+    
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
+    }
+  });
+  
+  const incompleteTodos = plan.todos.filter(t => !t.completed);
+  if (incompleteTodos.length > 0) {
+    y += 8;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(239, 68, 68);
+    doc.text(`待办缺口 (${incompleteTodos.length}项)`, 20, y);
+    y += 10;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    
+    incompleteTodos.slice(0, 10).forEach((todo) => {
+      doc.setTextColor(239, 68, 68);
+      doc.text('□', 25, y);
+      doc.setTextColor(0, 0, 0);
+      doc.text(todo.title, 32, y);
+      doc.setTextColor(156, 163, 175);
+      doc.text(todo.category, 170, y, { align: 'right' });
+      doc.setTextColor(0, 0, 0);
+      y += 6;
+      
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+    
+    if (incompleteTodos.length > 10) {
+      doc.setTextColor(156, 163, 175);
+      doc.text(`...还有 ${incompleteTodos.length - 10} 项待办`, 32, y);
+      y += 6;
+    }
+    y += 8;
+  }
+  
+  if (y > 240) {
+    doc.addPage();
+    y = 20;
+  }
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
   doc.text('家具清单', 20, y);
   y += 8;
   
@@ -285,11 +480,6 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
-
-export const generateShareLink = (planId: string): string => {
-  const baseUrl = window.location.origin + window.location.pathname;
-  return `${baseUrl}invite/${planId}`;
-};
 
 export const copyToClipboard = async (text: string): Promise<boolean> => {
   try {

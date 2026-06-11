@@ -542,7 +542,7 @@ export default function SharePage() {
   if (!plan) return null;
 
   const budget = calculateBudget(currentPlanId);
-  const shareLink = generateShareLink(currentPlanId);
+  const shareLink = generateShareLink(plan);
 
   const handleCopyLink = async () => {
     const success = await copyToClipboard(shareLink);
