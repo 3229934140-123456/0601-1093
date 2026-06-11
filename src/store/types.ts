@@ -71,6 +71,16 @@ export interface TodoItem {
   category: 'venue' | 'seating' | 'stage' | 'decoration' | 'ceremony' | 'other';
 }
 
+export interface RsvpResponse {
+  id: string;
+  guestName: string;
+  guestId?: string;
+  attending: boolean;
+  guestCount: number;
+  message?: string;
+  submittedAt: string;
+}
+
 export interface WeddingPlan {
   id: string;
   name: string;
@@ -89,6 +99,7 @@ export interface WeddingPlan {
   musicVolume: number;
   budget: number;
   entrancePath: Position[];
+  rsvpResponses: RsvpResponse[];
   createdAt: string;
   updatedAt: string;
 }

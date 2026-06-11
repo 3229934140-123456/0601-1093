@@ -22,6 +22,9 @@ import {
   Star,
   Route,
   ArrowRight,
+  MessageSquare,
+  Send,
+  X,
 } from 'lucide-react';
 import { useWeddingStore } from '@/store/weddingStore';
 import {
@@ -456,7 +459,7 @@ export default function GuestInvitePage() {
   const { planId } = useParams<{ planId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { plans } = useWeddingStore();
+  const { plans, addRsvpResponse } = useWeddingStore();
   
   const [viewPoint, setViewPoint] = useState(VIEW_POINTS[0]);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -469,6 +472,12 @@ export default function GuestInvitePage() {
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [plan, setPlan] = useState<WeddingPlan | Partial<WeddingPlan> | null>(null);
   const [planLoaded, setPlanLoaded] = useState(false);
+  const [highlightEntrancePath, setHighlightEntrancePath] = useState(false);
+  const [showRsvpModal, setShowRsvpModal] = useState(false);
+  const [rsvpSubmitted, setRsvpSubmitted] = useState(false);
+  const [rsvpAttending, setRsvpAttending] = useState<boolean | null>(null);
+  const [rsvpGuestCount, setRsvpGuestCount] = useState(1);
+  const [rsvpMessage, setRsvpMessage] = useState('');
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -624,10 +633,53 @@ export default function GuestInvitePage() {
   };
 
   const focusOnMySeat = () => {
-    if (currentGuestSeat) {
-      setOffset({ x: currentGuestSeat.x - 400, y: currentGuestSeat.y - 300 });
-      setZoom(2);
+    if (!currentGuestSeat || !canvasRef.current) return;
+    
+    const canvasWidth = canvasRef.current.clientWidth || 800;
+    const canvasHeight = canvasRef.current.clientHeight || 400;
+    const targetZoom = 1.8;
+    
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    
+    let targetOffsetX = currentGuestSeat.x - (centerX / targetZoom + (400 - canvasWidth / 2));
+    let targetOffsetY = currentGuestSeat.y - (centerY / targetZoom + (300 - canvasHeight / 2));
+    
+    const bounds = { minX: -200, maxX: 1000, minY: -200, maxY: 800 };
+    targetOffsetX = Math.max(bounds.minX, Math.min(bounds.maxX, targetOffsetX));
+    targetOffsetY = Math.max(bounds.minY, Math.min(bounds.maxY, targetOffsetY));
+    
+    setOffset({ x: targetOffsetX, y: targetOffsetY });
+    setZoom(targetZoom);
+    setHighlightEntrancePath(true);
+    
+    setTimeout(() => {
+      setHighlightEntrancePath(false);
+    }, 4000);
+  };
+
+  const handleOpenRsvp = () => {
+    setRsvpAttending(null);
+    setRsvpGuestCount(1);
+    setRsvpMessage('');
+    setRsvpSubmitted(false);
+    setShowRsvpModal(true);
+  };
+
+  const handleSubmitRsvp = () => {
+    if (rsvpAttending === null) return;
+    
+    if (planId) {
+      addRsvpResponse(planId, {
+        guestName: currentGuest?.name || '匿名宾客',
+        guestId: currentGuest?.id || undefined,
+        attending: rsvpAttending,
+        guestCount: rsvpAttending ? rsvpGuestCount : 0,
+        message: rsvpMessage.trim() || undefined,
+      });
     }
+    
+    setRsvpSubmitted(true);
   };
 
   return (
@@ -638,6 +690,143 @@ export default function GuestInvitePage() {
 
       {showIdentityModal && (
         <GuestIdentityModal guests={guests} onSelectGuest={handleSelectGuest} />
+      )}
+
+      {showRsvpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            {rsvpSubmitted ? (
+              <div className="p-8 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                </div>
+                <h3 className="text-xl font-display font-semibold text-champagne-dark mb-2">
+                  回执已提交
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  {rsvpAttending
+                    ? `感谢您的回复，期待与您相见！共${rsvpGuestCount}人出席`
+                    : '感谢您的回复，我们会妥善安排'}
+                </p>
+                <button
+                  onClick={() => setShowRsvpModal(false)}
+                  className="w-full py-3 bg-gradient-to-r from-champagne to-rose-gold text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+                >
+                  好的
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="bg-gradient-to-r from-rose-gold/20 via-champagne/20 to-rose-gold/20 p-6 text-center">
+                  <MessageSquare className="w-12 h-12 text-rose-400 mx-auto mb-2" />
+                  <h2 className="text-xl font-display font-semibold text-champagne-dark">
+                    出席回执
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {currentGuest?.name ? `${currentGuest.name}，请告知您是否能出席` : '请告知您是否能出席'}
+                  </p>
+                </div>
+
+                <div className="p-6">
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      是否出席
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setRsvpAttending(true)}
+                        className={cn(
+                          'py-3 px-4 rounded-xl border-2 font-medium transition-all flex items-center justify-center gap-2',
+                          rsvpAttending === true
+                            ? 'border-green-500 bg-green-50 text-green-700'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                        )}
+                      >
+                        <CheckCircle2 className="w-5 h-5" />
+                        我会出席
+                      </button>
+                      <button
+                        onClick={() => setRsvpAttending(false)}
+                        className={cn(
+                          'py-3 px-4 rounded-xl border-2 font-medium transition-all flex items-center justify-center gap-2',
+                          rsvpAttending === false
+                            ? 'border-red-500 bg-red-50 text-red-700'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                        )}
+                      >
+                        <X className="w-5 h-5" />
+                        无法出席
+                      </button>
+                    </div>
+                  </div>
+
+                  {rsvpAttending === true && (
+                    <div className="mb-5">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        出席人数
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setRsvpGuestCount(Math.max(1, rsvpGuestCount - 1))}
+                          className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 font-bold"
+                        >
+                          -
+                        </button>
+                        <div className="flex-1 text-center">
+                          <span className="text-2xl font-bold text-champagne-dark">
+                            {rsvpGuestCount}
+                          </span>
+                          <span className="text-sm text-gray-500 ml-1">人</span>
+                        </div>
+                        <button
+                          onClick={() => setRsvpGuestCount(Math.min(10, rsvpGuestCount + 1))}
+                          className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      祝福语 / 备注（可选）
+                    </label>
+                    <textarea
+                      value={rsvpMessage}
+                      onChange={(e) => setRsvpMessage(e.target.value)}
+                      placeholder="写下您的祝福或特殊需求..."
+                      rows={3}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-champagne focus:ring-2 focus:ring-champagne/20 outline-none transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowRsvpModal(false)}
+                      className="flex-1 py-3 border-2 border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSubmitRsvp}
+                      disabled={rsvpAttending === null}
+                      className={cn(
+                        'flex-1 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all',
+                        rsvpAttending === null
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-champagne to-rose-gold text-white hover:opacity-90'
+                      )}
+                    >
+                      <Send className="w-5 h-5" />
+                      提交回执
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {showHeader && (
@@ -1047,14 +1236,39 @@ export default function GuestInvitePage() {
 
                 {entrancePath.length > 1 && (
                   <svg className="absolute inset-0 pointer-events-none" style={{ width: 800, height: 600 }}>
+                    <defs>
+                      <linearGradient id="entranceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="rgba(255,200,100,0.9)" />
+                        <stop offset="100%" stopColor="rgba(255,150,120,0.9)" />
+                      </linearGradient>
+                      <filter id="glow">
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <feMerge>
+                          <feMergeNode in="coloredBlur"/>
+                          <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                      </filter>
+                    </defs>
                     <path
                       d={`M ${entrancePath.map((p) => `${p.x},${p.y}`).join(' L ')}`}
                       fill="none"
-                      stroke="rgba(180,140,100,0.5)"
-                      strokeWidth="4"
-                      strokeDasharray="10,5"
+                      stroke={highlightEntrancePath ? "url(#entranceGradient)" : "rgba(180,140,100,0.5)"}
+                      strokeWidth={highlightEntrancePath ? 8 : 4}
+                      strokeDasharray={highlightEntrancePath ? "none" : "10,5"}
                       strokeLinecap="round"
+                      filter={highlightEntrancePath ? "url(#glow)" : "none"}
+                      className={highlightEntrancePath ? "animate-pulse-soft" : ""}
                     />
+                    {highlightEntrancePath && entrancePath.map((point, i) => (
+                      <circle
+                        key={i}
+                        cx={point.x}
+                        cy={point.y}
+                        r={i === 0 || i === entrancePath.length - 1 ? 8 : 4}
+                        fill={i === 0 ? "#4ade80" : i === entrancePath.length - 1 ? "#f43f5e" : "#fbbf24"}
+                        className="animate-pulse-soft"
+                      />
+                    ))}
                   </svg>
                 )}
 
@@ -1101,6 +1315,31 @@ export default function GuestInvitePage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-champagne/20 via-rose-gold/20 to-champagne/20 rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-white/80 flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 text-champagne" />
+              </div>
+              <div>
+                <h3 className="font-display font-semibold text-champagne-dark">
+                  出席回执
+                </h3>
+                <p className="text-sm text-gray-500">
+                  请告知我们您是否能出席，方便我们安排
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleOpenRsvp}
+              className="px-5 py-2.5 bg-gradient-to-r from-champagne to-rose-gold text-white rounded-xl font-medium hover:opacity-90 transition-opacity flex items-center gap-2 flex-shrink-0"
+            >
+              <Send className="w-4 h-4" />
+              填写回执
+            </button>
           </div>
         </div>
 

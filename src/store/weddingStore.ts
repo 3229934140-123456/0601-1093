@@ -14,6 +14,7 @@ import type {
   Position,
   FurnitureType,
   DecorationType,
+  RsvpResponse,
 } from './types';
 import {
   DEFAULT_CEREMONY_STEPS,
@@ -48,6 +49,7 @@ const createDefaultPlan = (id: string, name: string): WeddingPlan => ({
   musicVolume: 50,
   budget: 0,
   entrancePath: [],
+  rsvpResponses: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -104,6 +106,8 @@ interface WeddingStore extends AppState {
   
   toggleComparePlan: (planId: string) => void;
   clearComparePlans: () => void;
+  
+  addRsvpResponse: (planId: string, response: Omit<RsvpResponse, 'id' | 'submittedAt'>) => void;
   
   calculateBudget: (planId: string) => number;
   exportPlanData: (planId: string) => object;
@@ -707,6 +711,30 @@ export const useWeddingStore = create<WeddingStore>()(
 
       clearComparePlans: () => {
         set({ comparePlanIds: [] });
+      },
+
+      addRsvpResponse: (planId, response) => {
+        set((state) => {
+          const plan = state.plans[planId];
+          if (!plan) return state;
+
+          const newResponse: RsvpResponse = {
+            ...response,
+            id: generateId(),
+            submittedAt: new Date().toISOString(),
+          };
+
+          return {
+            plans: {
+              ...state.plans,
+              [planId]: {
+                ...plan,
+                rsvpResponses: [...plan.rsvpResponses, newResponse],
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
       },
 
       calculateBudget: (planId) => {

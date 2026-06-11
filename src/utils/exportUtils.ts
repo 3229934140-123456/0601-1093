@@ -12,12 +12,17 @@ export const encodePlanData = (plan: WeddingPlan): string => {
       timeMode: plan.timeMode,
       stageConfig: plan.stageConfig,
       furniture: plan.furniture,
-      guests: plan.guests.map(({ id, name, seatId, isVip }) => ({ id, name, seatId, isVip })),
+      guests: plan.guests.map(({ id, name, seatId, isVip, tableNumber }) => ({ id, name, seatId, isVip, tableNumber })),
       decorations: plan.decorations,
       ceremonySteps: plan.ceremonySteps,
       todos: plan.todos,
       entrancePath: plan.entrancePath,
       musicName: plan.musicName,
+      backgroundMusic: plan.backgroundMusic,
+      brideImage: plan.brideImage,
+      groomImage: plan.groomImage,
+      budget: plan.budget,
+      musicVolume: plan.musicVolume,
       createdAt: plan.createdAt,
       updatedAt: plan.updatedAt,
     };
@@ -48,6 +53,52 @@ export const generateShareLink = (plan: WeddingPlan): string => {
   const baseUrl = window.location.origin;
   const encodedData = encodePlanData(plan);
   return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}`;
+};
+
+export const generateGuestShareLink = (plan: WeddingPlan, guest: Guest): string => {
+  const baseUrl = window.location.origin;
+  const encodedData = encodePlanData(plan);
+  return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guest=${encodeURIComponent(guest.name)}`;
+};
+
+export const generateLightweightShareLink = (plan: WeddingPlan, guest?: Guest): string => {
+  try {
+    const baseUrl = window.location.origin;
+    const lightweightData = {
+      id: plan.id,
+      name: plan.name,
+      sceneType: plan.sceneType,
+      timeMode: plan.timeMode,
+      stageConfig: plan.stageConfig,
+      furniture: plan.furniture.map(({ id, type, subtype, x, y, rotation, scale, color, guestId, label }) => ({
+        id, type, subtype, x, y, rotation, scale, color, guestId, label
+      })),
+      guests: plan.guests.map(({ id, name, seatId, isVip, tableNumber }) => ({ id, name, seatId, isVip, tableNumber })),
+      decorations: plan.decorations.map(({ id, type, style, x, y, color, price }) => ({
+        id, type, style, x, y, color, price
+      })),
+      ceremonySteps: plan.ceremonySteps,
+      entrancePath: plan.entrancePath,
+      musicName: plan.musicName,
+      brideImage: plan.brideImage,
+      groomImage: plan.groomImage,
+      budget: plan.budget,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt,
+    };
+    
+    const jsonStr = JSON.stringify(lightweightData);
+    const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+    const encodedData = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    
+    if (guest) {
+      return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guest=${encodeURIComponent(guest.name)}`;
+    }
+    return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}`;
+  } catch (error) {
+    console.error('Failed to generate lightweight share link:', error);
+    return generateShareLink(plan);
+  }
 };
 
 interface CompletenessCheck {
@@ -219,196 +270,600 @@ export const exportToExcel = (plan: WeddingPlan, budget: number): void => {
   XLSX.writeFile(wb, `${plan.name}_布置清单.xlsx`);
 };
 
-export const exportToPDF = (plan: WeddingPlan, budget: number): void => {
-  const doc = new jsPDF();
-  let y = 20;
-  
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text('婚礼布置清单', 105, y, { align: 'center' });
-  y += 10;
-  
-  doc.setFontSize(14);
-  doc.text(plan.name, 105, y, { align: 'center' });
-  y += 15;
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(0, 0, 0);
-  
-  const addInfoLine = (label: string, value: string, isCompleted?: boolean) => {
-    doc.text(label, 20, y);
-    if (isCompleted !== undefined) {
-      if (isCompleted) {
-        doc.setTextColor(34, 197, 94);
-      } else {
-        doc.setTextColor(239, 68, 68);
-      }
-    }
-    doc.text(value, 170, y, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    y += 7;
-  };
-  
-  addInfoLine(`生成日期: ${new Date().toLocaleDateString('zh-CN')}`, '');
-  y += 3;
-  
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('基本信息', 20, y);
-  y += 8;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  
-  addInfoLine('场地类型:', `${SCENE_NAMES[plan.sceneType]} / ${TIME_MODE_NAMES[plan.timeMode]}`, true);
-  addInfoLine('预算总额:', `¥${budget.toLocaleString()}`, true);
-  addInfoLine('宾客总数:', `${plan.guests.length}人 (VIP: ${plan.guests.filter(g => g.isVip).length}人)`, plan.guests.length > 0);
-  addInfoLine('新娘照片:', plan.brideImage ? '已上传' : '未上传', !!plan.brideImage);
-  addInfoLine('新郎照片:', plan.groomImage ? '已上传' : '未上传', !!plan.groomImage);
-  addInfoLine('背景音乐:', plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置'), !!(plan.backgroundMusic || plan.musicName));
-  addInfoLine('入场路线:', plan.entrancePath.length > 0 ? `已设置 (${plan.entrancePath.length}个点)` : '未设置', plan.entrancePath.length > 0);
-  addInfoLine('司仪台:', `位置(${plan.stageConfig.podiumX}, ${plan.stageConfig.podiumY}) 样式: ${plan.stageConfig.podiumStyle}`, true);
-  addInfoLine('舞台尺寸:', `宽${plan.stageConfig.width} x 高${plan.stageConfig.height}`, true);
-  addInfoLine('T型舞台:', plan.stageConfig.hasTStage ? `是 (长度: ${plan.stageConfig.tStageLength})` : '否', true);
-  y += 8;
-  
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('准备完整度检查', 20, y);
-  y += 10;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  
+export const exportToPDF = async (plan: WeddingPlan, budget: number): Promise<void> => {
   const completenessChecks = getCompletenessChecks(plan);
   const completedCount = completenessChecks.filter(c => c.completed).length;
   const progress = Math.round((completedCount / completenessChecks.length) * 100);
-  
-  doc.setTextColor(0, 0, 0);
-  doc.text(`整体进度: ${progress}% (${completedCount}/${completenessChecks.length}项)`, 20, y);
-  y += 8;
-  
-  let currentCategory = '';
-  completenessChecks.forEach((check) => {
-    if (check.category !== currentCategory) {
-      y += 4;
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(180, 140, 100);
-      doc.text(`【${check.category}】`, 25, y);
-      y += 7;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(0, 0, 0);
-      currentCategory = check.category;
-    }
-    
-    if (check.completed) {
-      doc.setTextColor(34, 197, 94);
-      doc.text('✓', 25, y);
-    } else {
-      doc.setTextColor(239, 68, 68);
-      doc.text('✗', 25, y);
-    }
-    doc.setTextColor(0, 0, 0);
-    doc.text(check.item, 32, y);
-    
-    if (check.completed) {
-      doc.setTextColor(34, 197, 94);
-    } else {
-      doc.setTextColor(239, 68, 68);
-    }
-    doc.text(check.status, 170, y, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    y += 6;
-    
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
-    }
-  });
-  
   const incompleteTodos = plan.todos.filter(t => !t.completed);
-  if (incompleteTodos.length > 0) {
-    y += 8;
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(239, 68, 68);
-    doc.text(`待办缺口 (${incompleteTodos.length}项)`, 20, y);
-    y += 10;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    
-    incompleteTodos.slice(0, 10).forEach((todo) => {
-      doc.setTextColor(239, 68, 68);
-      doc.text('□', 25, y);
-      doc.setTextColor(0, 0, 0);
-      doc.text(todo.title, 32, y);
-      doc.setTextColor(156, 163, 175);
-      doc.text(todo.category, 170, y, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-      y += 6;
-      
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
-    });
-    
-    if (incompleteTodos.length > 10) {
-      doc.setTextColor(156, 163, 175);
-      doc.text(`...还有 ${incompleteTodos.length - 10} 项待办`, 32, y);
-      y += 6;
-    }
-    y += 8;
-  }
-  
-  if (y > 240) {
-    doc.addPage();
-    y = 20;
-  }
-  
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('家具清单', 20, y);
-  y += 8;
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
   const furnitureSummary = summarizeFurniture(plan.furniture);
-  furnitureSummary.forEach((item) => {
-    doc.text(`${item.name} x ${item.count}`, 25, y);
-    doc.text(`¥${item.total.toLocaleString()}`, 170, y, { align: 'right' });
-    y += 6;
-  });
-  const furnitureTotal = furnitureSummary.reduce((sum, i) => sum + i.total, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`家具小计: ¥${furnitureTotal.toLocaleString()}`, 170, y, { align: 'right' });
-  y += 12;
-  
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('装饰清单', 20, y);
-  y += 8;
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
   const decorationSummary = summarizeDecorations(plan.decorations);
-  decorationSummary.forEach((item) => {
-    doc.text(`${item.name} x ${item.count}`, 25, y);
-    doc.text(`¥${item.total.toLocaleString()}`, 170, y, { align: 'right' });
-    y += 6;
-  });
+  const furnitureTotal = furnitureSummary.reduce((sum, i) => sum + i.total, 0);
   const decorationTotal = decorationSummary.reduce((sum, i) => sum + i.total, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`装饰小计: ¥${decorationTotal.toLocaleString()}`, 170, y, { align: 'right' });
-  y += 15;
-  
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`总计: ¥${(furnitureTotal + decorationTotal).toLocaleString()}`, 170, y, { align: 'right' });
-  
-  doc.save(`${plan.name}_布置清单.pdf`);
+
+  const getCategoryColor = (category: string) => {
+    const colors: Record<string, string> = {
+      '新人形象': '#ec4899',
+      '场地布置': '#3b82f6',
+      '舞台配置': '#8b5cf6',
+      '家具布置': '#10b981',
+      '装饰布置': '#f43f5e',
+      '音乐音效': '#f59e0b',
+      '仪式流程': '#06b6d4',
+      '宾客管理': '#6366f1',
+    };
+    return colors[category] || '#6b7280';
+  };
+
+  const todoCategoryNames: Record<string, string> = {
+    venue: '场地',
+    seating: '座位',
+    stage: '舞台',
+    decoration: '装饰',
+    ceremony: '流程',
+    other: '其他',
+  };
+
+  const checksByCategory = completenessChecks.reduce((acc, check) => {
+    if (!acc[check.category]) acc[check.category] = [];
+    acc[check.category].push(check);
+    return acc;
+  }, {} as Record<string, typeof completenessChecks>);
+
+  const printHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${plan.name} - 婚礼布置清单</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; 
+    padding: 40px; 
+    color: #1f2937; 
+    background: white; 
+  }
+  .header { 
+    text-align: center; 
+    padding-bottom: 24px; 
+    border-bottom: 3px solid #d4a574; 
+    margin-bottom: 28px; 
+  }
+  .header h1 { 
+    font-size: 28px; 
+    color: #92400e; 
+    margin-bottom: 8px; 
+  }
+  .header h2 { 
+    font-size: 18px; 
+    color: #6b7280; 
+    font-weight: normal; 
+  }
+  .header .meta { 
+    margin-top: 12px; 
+    color: #9ca3af; 
+    font-size: 13px; 
+  }
+  .section { 
+    margin-bottom: 28px; 
+  }
+  .section-title { 
+    font-size: 18px; 
+    font-weight: 600; 
+    color: #92400e; 
+    padding-bottom: 8px; 
+    border-bottom: 2px solid #fde68a; 
+    margin-bottom: 16px; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+  }
+  .section-title::before { 
+    content: ''; 
+    width: 4px; 
+    height: 18px; 
+    background: #d97706; 
+    border-radius: 2px; 
+  }
+  .info-grid { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 12px; 
+  }
+  .info-card { 
+    background: #fffbeb; 
+    border: 1px solid #fde68a; 
+    border-radius: 8px; 
+    padding: 14px; 
+  }
+  .info-card .label { 
+    font-size: 12px; 
+    color: #92400e; 
+    margin-bottom: 4px; 
+  }
+  .info-card .value { 
+    font-size: 15px; 
+    font-weight: 600; 
+    color: #78350f; 
+  }
+  .info-card .value.incomplete { 
+    color: #dc2626; 
+  }
+  .progress-section { 
+    background: linear-gradient(135deg, #fef3c7, #fce7f3); 
+    border-radius: 12px; 
+    padding: 20px; 
+    margin-bottom: 20px; 
+  }
+  .progress-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 12px; 
+  }
+  .progress-header .label { 
+    font-size: 16px; 
+    font-weight: 600; 
+    color: #92400e; 
+  }
+  .progress-header .percent { 
+    font-size: 24px; 
+    font-weight: bold; 
+    color: #d97706; 
+  }
+  .progress-bar { 
+    height: 12px; 
+    background: #fef3c7; 
+    border-radius: 6px; 
+    overflow: hidden; 
+  }
+  .progress-bar-fill { 
+    height: 100%; 
+    background: linear-gradient(90deg, #f59e0b, #ec4899); 
+    border-radius: 6px; 
+    transition: width 0.5s; 
+  }
+  .checks-grid { 
+    display: grid; 
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 16px; 
+  }
+  .check-category { 
+    background: #fafafa; 
+    border-radius: 8px; 
+    padding: 14px; 
+  }
+  .check-category-title { 
+    font-size: 14px; 
+    font-weight: 600; 
+    margin-bottom: 10px; 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+  }
+  .check-category-title .dot { 
+    width: 8px; 
+    height: 8px; 
+    border-radius: 50%; 
+  }
+  .check-item { 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    padding: 6px 0; 
+    font-size: 13px; 
+    border-bottom: 1px solid #f3f4f6; 
+  }
+  .check-item:last-child { 
+    border-bottom: none; 
+  }
+  .check-item .name { 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+  }
+  .check-item .status { 
+    font-size: 12px; 
+    padding: 2px 8px; 
+    border-radius: 10px; 
+  }
+  .status.completed { 
+    background: #dcfce7; 
+    color: #166534; 
+  }
+  .status.incomplete { 
+    background: #fee2e2; 
+    color: #991b1b; 
+  }
+  .icon-check { 
+    color: #22c55e; 
+    font-weight: bold; 
+  }
+  .icon-cross { 
+    color: #ef4444; 
+    font-weight: bold; 
+  }
+  .todos-section { 
+    background: #fef2f2; 
+    border-radius: 8px; 
+    padding: 16px; 
+  }
+  .todos-section h4 { 
+    color: #991b1b; 
+    margin-bottom: 12px; 
+    font-size: 15px; 
+  }
+  .todo-item { 
+    display: flex; 
+    align-items: flex-start; 
+    gap: 8px; 
+    padding: 8px 0; 
+    border-bottom: 1px dashed #fecaca; 
+    font-size: 13px; 
+  }
+  .todo-item:last-child { 
+    border-bottom: none; 
+  }
+  .todo-item .todo-box { 
+    width: 16px; 
+    height: 16px; 
+    border: 2px solid #ef4444; 
+    border-radius: 3px; 
+    flex-shrink: 0; 
+    margin-top: 1px; 
+  }
+  .todo-item .todo-cat { 
+    margin-left: auto; 
+    font-size: 11px; 
+    color: #9ca3af; 
+    background: white; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+  }
+  .items-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    font-size: 13px; 
+  }
+  .items-table th { 
+    background: #fef3c7; 
+    color: #92400e; 
+    padding: 10px 12px; 
+    text-align: left; 
+    font-weight: 600; 
+    border-bottom: 2px solid #d97706; 
+  }
+  .items-table td { 
+    padding: 9px 12px; 
+    border-bottom: 1px solid #f3f4f6; 
+  }
+  .items-table tr:last-child td { 
+    border-bottom: none; 
+  }
+  .items-table .total-row td { 
+    background: #fef3c7; 
+    font-weight: 600; 
+    color: #92400e; 
+    padding-top: 12px; 
+  }
+  .budget-summary { 
+    background: linear-gradient(135deg, #ec4899, #d97706); 
+    color: white; 
+    border-radius: 12px; 
+    padding: 24px; 
+    text-align: center; 
+  }
+  .budget-summary .label { 
+    font-size: 14px; 
+    opacity: 0.9; 
+    margin-bottom: 6px; 
+  }
+  .budget-summary .amount { 
+    font-size: 32px; 
+    font-weight: bold; 
+  }
+  .budget-breakdown { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 12px; 
+    margin-top: 20px; 
+  }
+  .budget-item { 
+    text-align: center; 
+    padding: 14px; 
+    background: rgba(255,255,255,0.15); 
+    border-radius: 8px; 
+  }
+  .budget-item .b-label { 
+    font-size: 12px; 
+    opacity: 0.85; 
+  }
+  .budget-item .b-value { 
+    font-size: 18px; 
+    font-weight: 600; 
+    margin-top: 4px; 
+  }
+  .guest-list { 
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 8px; 
+  }
+  .guest-chip { 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+    padding: 6px 10px; 
+    background: #f5f3ff; 
+    border-radius: 16px; 
+    font-size: 12px; 
+  }
+  .guest-chip.vip { 
+    background: #fef3c7; 
+  }
+  .guest-chip .seat { 
+    color: #6b7280; 
+    font-size: 11px; 
+  }
+  .ceremony-list { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px; 
+  }
+  .ceremony-step { 
+    display: flex; 
+    gap: 14px; 
+    padding: 12px; 
+    background: #f0fdfa; 
+    border-radius: 8px; 
+    border-left: 4px solid #14b8a6; 
+  }
+  .ceremony-step .step-num { 
+    width: 28px; 
+    height: 28px; 
+    background: #14b8a6; 
+    color: white; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-weight: 600; 
+    font-size: 13px; 
+    flex-shrink: 0; 
+  }
+  .ceremony-step .step-content { 
+    flex: 1; 
+  }
+  .ceremony-step .step-title { 
+    font-weight: 600; 
+    font-size: 14px; 
+    color: #115e59; 
+    margin-bottom: 3px; 
+  }
+  .ceremony-step .step-desc { 
+    font-size: 12px; 
+    color: #6b7280; 
+  }
+  .ceremony-step .step-meta { 
+    text-align: right; 
+    font-size: 12px; 
+    color: #0d9488; 
+    flex-shrink: 0; 
+  }
+  @media print {
+    body { padding: 20px; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>💍 婚礼布置清单</h1>
+    <h2>${plan.name}</h2>
+    <div class="meta">生成日期：${new Date().toLocaleDateString('zh-CN')} · 打印时间：${new Date().toLocaleString('zh-CN')}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">方案概览</div>
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="label">场地类型</div>
+        <div class="value">${SCENE_NAMES[plan.sceneType]} · ${TIME_MODE_NAMES[plan.timeMode]}</div>
+      </div>
+      <div class="info-card">
+        <div class="label">宾客总数</div>
+        <div class="value">${plan.guests.length} 人 ${plan.guests.filter(g => g.isVip).length > 0 ? `(VIP ${plan.guests.filter(g => g.isVip).length}人)` : ''}</div>
+      </div>
+      <div class="info-card">
+        <div class="label">仪式环节</div>
+        <div class="value">${plan.ceremonySteps.length} 个步骤</div>
+      </div>
+      <div class="info-card">
+        <div class="label">新娘照片</div>
+        <div class="value ${plan.brideImage ? '' : 'incomplete'}">${plan.brideImage ? '✓ 已上传' : '✗ 未上传'}</div>
+      </div>
+      <div class="info-card">
+        <div class="label">新郎照片</div>
+        <div class="value ${plan.groomImage ? '' : 'incomplete'}">${plan.groomImage ? '✓ 已上传' : '✗ 未上传'}</div>
+      </div>
+      <div class="info-card">
+        <div class="label">背景音乐</div>
+        <div class="value ${plan.backgroundMusic || plan.musicName ? '' : 'incomplete'}">${plan.musicName || (plan.backgroundMusic ? '已上传' : '未设置')}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">准备完整度</div>
+    <div class="progress-section">
+      <div class="progress-header">
+        <span class="label">整体准备进度</span>
+        <span class="percent">${progress}%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar-fill" style="width: ${progress}%"></div>
+      </div>
+      <div style="text-align:center; margin-top: 8px; font-size: 13px; color: #92400e;">
+        ${completedCount} / ${completenessChecks.length} 项已完成
+      </div>
+    </div>
+    <div class="checks-grid">
+      ${Object.entries(checksByCategory).map(([category, checks]) => `
+        <div class="check-category">
+          <div class="check-category-title">
+            <span class="dot" style="background: ${getCategoryColor(category)}"></span>
+            ${category}
+            <span style="margin-left: auto; font-size: 12px; color: #6b7280; font-weight: normal;">
+              ${checks.filter(c => c.completed).length}/${checks.length}
+            </span>
+          </div>
+          ${checks.map(check => `
+            <div class="check-item">
+              <span class="name">
+                <span class="${check.completed ? 'icon-check' : 'icon-cross'}">${check.completed ? '✓' : '✗'}</span>
+                ${check.item}
+              </span>
+              <span class="status ${check.completed ? 'completed' : 'incomplete'}">${check.status}</span>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+  </div>
+
+  ${incompleteTodos.length > 0 ? `
+  <div class="section page-break">
+    <div class="section-title">待办缺口</div>
+    <div class="todos-section">
+      <h4>⚠️ 还有 ${incompleteTodos.length} 项待完成，请优先处理：</h4>
+      ${incompleteTodos.map(todo => `
+        <div class="todo-item">
+          <span class="todo-box"></span>
+          <span>${todo.title}</span>
+          <span class="todo-cat">${todoCategoryNames[todo.category] || todo.category}</span>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ` : ''}
+
+  <div class="section page-break">
+    <div class="section-title">预算与清单</div>
+    <div class="budget-summary">
+      <div class="label">布置总预算</div>
+      <div class="amount">¥ ${(furnitureTotal + decorationTotal).toLocaleString()}</div>
+      <div class="budget-breakdown">
+        <div class="budget-item">
+          <div class="b-label">家具费用</div>
+          <div class="b-value">¥ ${furnitureTotal.toLocaleString()}</div>
+        </div>
+        <div class="budget-item">
+          <div class="b-label">装饰费用</div>
+          <div class="b-value">¥ ${decorationTotal.toLocaleString()}</div>
+        </div>
+        <div class="budget-item">
+          <div class="b-label">规划预算</div>
+          <div class="b-value">¥ ${budget.toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+
+    ${furnitureSummary.length > 0 ? `
+    <div style="margin-top: 24px;">
+      <h4 style="font-size: 15px; color: #065f46; margin-bottom: 10px;">🪑 家具清单</h4>
+      <table class="items-table">
+        <thead>
+          <tr><th>类型</th><th>名称</th><th style="text-align: center;">数量</th><th style="text-align: right;">单价</th><th style="text-align: right;">小计</th></tr>
+        </thead>
+        <tbody>
+          ${furnitureSummary.map(item => `
+            <tr>
+              <td>${item.type}</td>
+              <td>${item.name}</td>
+              <td style="text-align: center;">${item.count}</td>
+              <td style="text-align: right;">¥ ${item.price.toLocaleString()}</td>
+              <td style="text-align: right;">¥ ${item.total.toLocaleString()}</td>
+            </tr>
+          `).join('')}
+          <tr class="total-row">
+            <td colspan="4">家具小计</td>
+            <td style="text-align: right;">¥ ${furnitureTotal.toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+
+    ${decorationSummary.length > 0 ? `
+    <div style="margin-top: 24px;">
+      <h4 style="font-size: 15px; color: #9d174d; margin-bottom: 10px;">🌸 装饰清单</h4>
+      <table class="items-table">
+        <thead>
+          <tr><th>类型</th><th>名称</th><th style="text-align: center;">数量</th><th style="text-align: right;">单价</th><th style="text-align: right;">小计</th></tr>
+        </thead>
+        <tbody>
+          ${decorationSummary.map(item => `
+            <tr>
+              <td>${item.type}</td>
+              <td>${item.name}</td>
+              <td style="text-align: center;">${item.count}</td>
+              <td style="text-align: right;">¥ ${item.price.toLocaleString()}</td>
+              <td style="text-align: right;">¥ ${item.total.toLocaleString()}</td>
+            </tr>
+          `).join('')}
+          <tr class="total-row">
+            <td colspan="4">装饰小计</td>
+            <td style="text-align: right;">¥ ${decorationTotal.toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+  </div>
+
+  ${plan.guests.length > 0 ? `
+  <div class="section page-break">
+    <div class="section-title">宾客名单 (${plan.guests.length}人)</div>
+    <div class="guest-list">
+      ${plan.guests.map(guest => `
+        <div class="guest-chip ${guest.isVip ? 'vip' : ''}">
+          ${guest.isVip ? '👑' : '👤'} ${guest.name}
+          <span class="seat">${guest.seatId ? '有座' : '待安排'}</span>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ` : ''}
+
+  ${plan.ceremonySteps.length > 0 ? `
+  <div class="section">
+    <div class="section-title">仪式流程</div>
+    <div class="ceremony-list">
+      ${[...plan.ceremonySteps].sort((a, b) => a.order - b.order).map((step, i) => `
+        <div class="ceremony-step">
+          <div class="step-num">${i + 1}</div>
+          <div class="step-content">
+            <div class="step-title">${step.title}</div>
+            <div class="step-desc">${step.description}${step.host ? ` · 主持人: ${step.host}` : ''}</div>
+          </div>
+          <div class="step-meta">${step.durationMin} 分钟</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ` : ''}
+
+</body>
+</html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  }
 };
 
 function summarizeFurniture(furniture: Furniture[]) {
