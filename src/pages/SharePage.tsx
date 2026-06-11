@@ -46,7 +46,7 @@ import {
   DECORATION_TEMPLATES,
 } from '@/constants/templates';
 import { cn } from '@/lib/utils';
-import type { WeddingPlan, TodoItem } from '@/store/types';
+import type { WeddingPlan, TodoItem, Guest, RsvpResponse } from '@/store/types';
 import dayjs from 'dayjs';
 
 const TODO_CATEGORY_ICONS: Record<string, typeof MapPin> = {
@@ -536,6 +536,9 @@ export default function SharePage() {
   const [copiedGuestId, setCopiedGuestId] = useState<string | null>(null);
   const [showGuestLinks, setShowGuestLinks] = useState(false);
   const [showRsvpDetails, setShowRsvpDetails] = useState(false);
+  const [rsvpFilter, setRsvpFilter] = useState<'all' | 'pending' | 'attending' | 'declined'>('all');
+  const [copiedRsvpId, setCopiedRsvpId] = useState<string | null>(null);
+  const [shareMode, setShareMode] = useState<'full' | 'light'>('full');
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showAddTodoModal, setShowAddTodoModal] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState<string | null>(
@@ -550,14 +553,106 @@ export default function SharePage() {
   if (!plan) return null;
 
   const budget = calculateBudget(currentPlanId);
-  const shareLink = generateShareLink(plan);
+  const shareLink = shareMode === 'full' ? generateShareLink(plan) : generateLightweightShareLink(plan);
+  const shareLinkSize = Math.round((new TextEncoder().encode(shareLink).length) / 1024 * 10) / 10;
+  const isLargeLink = shareLink.length > 2000;
 
   const rsvpResponses = plan.rsvpResponses || [];
   const attendingCount = rsvpResponses.filter(r => r.attending).length;
   const declinedCount = rsvpResponses.filter(r => !r.attending).length;
   const totalAttendingGuests = rsvpResponses.filter(r => r.attending).reduce((sum, r) => sum + r.guestCount, 0);
-  const respondedGuests = new Set(rsvpResponses.map(r => r.guestName)).size;
+  const respondedGuests = new Set(rsvpResponses.map(r => r.guestId || r.guestName)).size;
   const responseRate = plan.guests.length > 0 ? Math.round((respondedGuests / plan.guests.length) * 100) : 0;
+
+  const respondedGuestIds = new Set(
+    rsvpResponses.map(r => r.guestId).filter(Boolean) as string[]
+  );
+  const respondedGuestNames = new Set(
+    rsvpResponses.filter(r => !r.guestId).map(r => r.guestName)
+  );
+
+  const pendingGuests = plan.guests.filter(
+    g => !respondedGuestIds.has(g.id) && !respondedGuestNames.has(g.name)
+  );
+
+  const attendingResponses = rsvpResponses.filter(r => r.attending);
+  const declinedResponses = rsvpResponses.filter(r => !r.attending);
+
+  const getFilteredRsvpList = () => {
+    switch (rsvpFilter) {
+      case 'attending':
+        return attendingResponses.map(r => ({ type: 'response', data: r } as const));
+      case 'declined':
+        return declinedResponses.map(r => ({ type: 'response', data: r } as const));
+      case 'pending':
+        return pendingGuests.map(g => ({ type: 'guest', data: g } as const));
+      default:
+        return [];
+    }
+  };
+
+  const generateReminderText = (guest: Guest) => {
+    return `【婚礼提醒】亲爱的${guest.name}，您好！${plan.name}婚礼将于近期举行，我们还未收到您的出席确认，请尽快回复哦~`;
+  };
+
+  const handleCopyReminder = async (guest: Guest) => {
+    const text = generateReminderText(guest);
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopiedRsvpId(guest.id);
+      setTimeout(() => setCopiedRsvpId(null), 2000);
+    }
+  };
+
+  const handleExportRsvp = (format: 'csv' | 'copy') => {
+    const rows = [['宾客姓名', 'VIP', '座位号', '回复状态', '出席人数', '祝福语', '回复时间']];
+    
+    const allGuests = plan.guests;
+    allGuests.forEach((guest) => {
+      const rsvp = rsvpResponses.find(
+        r => r.guestId === guest.id || r.guestName === guest.name
+      );
+      const seatLabel = plan.furniture.find(f => f.id === guest.seatId)?.label || '未安排';
+      
+      let status = '未回复';
+      let guestCount = '-';
+      let message = '-';
+      let submitTime = '-';
+      
+      if (rsvp) {
+        status = rsvp.attending ? '确认出席' : '无法出席';
+        guestCount = rsvp.attending ? rsvp.guestCount.toString() : '0';
+        message = rsvp.message || '-';
+        submitTime = new Date(rsvp.submittedAt).toLocaleString('zh-CN');
+      }
+      
+      rows.push([
+        guest.name,
+        guest.isVip ? '是' : '否',
+        seatLabel,
+        status,
+        guestCount,
+        message,
+        submitTime,
+      ]);
+    });
+
+    if (format === 'csv') {
+      const csvContent = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${plan.name}-RSVP回执清单.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      const textContent = rows.map(row => row.join('\t')).join('\n');
+      copyToClipboard(textContent);
+    }
+  };
 
   const handleCopyLink = async () => {
     const success = await copyToClipboard(shareLink);
@@ -674,15 +769,67 @@ export default function SharePage() {
                 <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
                   <Share2 className="w-6 h-6" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <h3 className="font-bold text-lg">生成邀请链接</h3>
                   <p className="text-white/80 text-sm">分享给宾客预览婚礼场地</p>
                 </div>
+                <div className="flex bg-white/10 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setShareMode('full')}
+                    className={cn(
+                      'px-3 py-1 rounded-md text-xs font-medium transition-all',
+                      shareMode === 'full' ? 'bg-white text-rose-500' : 'text-white/80 hover:text-white'
+                    )}
+                  >
+                    完整
+                  </button>
+                  <button
+                    onClick={() => setShareMode('light')}
+                    className={cn(
+                      'px-3 py-1 rounded-md text-xs font-medium transition-all',
+                      shareMode === 'light' ? 'bg-white text-rose-500' : 'text-white/80 hover:text-white'
+                    )}
+                  >
+                    轻量
+                  </button>
+                </div>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 mb-4">
-                <p className="text-xs text-white/70 mb-1">邀请链接</p>
+
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-white/70">
+                    {shareMode === 'full' ? '完整分享链接' : '轻量分享链接'}
+                  </p>
+                  <span className="text-xs text-white/60">
+                    {shareLinkSize} KB
+                    {shareMode === 'full' && isLargeLink && <span className="ml-1 text-amber-200">· 较大</span>}
+                  </span>
+                </div>
                 <p className="text-sm font-mono truncate">{shareLink}</p>
               </div>
+
+              {shareMode === 'full' && isLargeLink && (
+                <div className="bg-amber-500/20 border border-amber-300/30 rounded-lg p-2.5 mb-3">
+                  <p className="text-xs text-amber-100 flex items-start gap-1.5">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      链接较大（含照片/音乐），部分浏览器可能受限。建议使用「轻量」模式或直接通过聊天软件发送。
+                    </span>
+                  </p>
+                </div>
+              )}
+
+              {shareMode === 'light' && (
+                <div className="bg-white/10 rounded-lg p-2.5 mb-3">
+                  <p className="text-xs text-white/80 flex items-start gap-1.5">
+                    <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      轻量模式保留核心数据（场地布置、座位安排、仪式流程），照片音乐等本地加载，链接更短更稳定。
+                    </span>
+                  </p>
+                </div>
+              )}
+
               <button
                 onClick={handleCopyLink}
                 className={cn(
@@ -695,12 +842,12 @@ export default function SharePage() {
                 {copied ? (
                   <>
                     <Check className="w-5 h-5" />
-                    已复制
+                    已复制链接
                   </>
                 ) : (
                   <>
                     <Copy className="w-5 h-5" />
-                    复制链接
+                    复制{shareMode === 'full' ? '完整' : '轻量'}链接
                   </>
                 )}
               </button>
@@ -802,11 +949,27 @@ export default function SharePage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-lg text-gray-800">
-                    RSVP 回执统计
+                    RSVP 回执中心
                   </h3>
-                  <p className="text-gray-500 text-sm">宾客出席确认情况汇总</p>
+                  <p className="text-gray-500 text-sm">宾客出席确认与跟进管理</p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleExportRsvp('copy')}
+                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    复制
+                  </button>
+                  <button
+                    onClick={() => handleExportRsvp('csv')}
+                    className="px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    导出
+                  </button>
+                </div>
+                <div className="text-right pl-4 border-l border-gray-100">
                   <div className="text-2xl font-bold text-champagne-dark">{responseRate}%</div>
                   <div className="text-xs text-gray-400">回复率</div>
                 </div>
@@ -829,26 +992,39 @@ export default function SharePage() {
                   <div className="text-xs text-amber-600">预计出席人数</div>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
-                  <Users className="w-6 h-6 text-gray-500 mx-auto mb-1" />
+                  <AlertCircle className="w-6 h-6 text-gray-500 mx-auto mb-1" />
                   <div className="text-2xl font-bold text-gray-600">
-                    {Math.max(0, plan.guests.length - respondedGuests)}
+                    {pendingGuests.length}
                   </div>
                   <div className="text-xs text-gray-500">待回复</div>
                 </div>
               </div>
 
-              <button
-                onClick={() => setShowRsvpDetails(!showRsvpDetails)}
-                className="w-full py-2 px-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-between text-sm"
-              >
-                <span className="text-gray-600">
-                  {showRsvpDetails ? '收起回执详情' : `查看回执详情 (${rsvpResponses.length}条)`}
-                </span>
-                {showRsvpDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
+              <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
+                {[
+                  { key: 'all', label: '全部回执', icon: MessageSquare },
+                  { key: 'pending', label: `待回复 (${pendingGuests.length})`, icon: AlertCircle },
+                  { key: 'attending', label: `确认出席 (${attendingCount})`, icon: UserCheck },
+                  { key: 'declined', label: `无法出席 (${declinedCount})`, icon: UserX },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setRsvpFilter(tab.key as any)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1.5',
+                      rsvpFilter === tab.key
+                        ? 'bg-champagne text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-              {showRsvpDetails && (
-                <div className="mt-3 max-h-64 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+              {rsvpFilter === 'all' ? (
+                <div className="max-h-72 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
                   {rsvpResponses.length === 0 ? (
                     <div className="p-8 text-center text-gray-400">
                       <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -896,6 +1072,98 @@ export default function SharePage() {
                         )}
                       </div>
                     ))
+                  )}
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                  {getFilteredRsvpList().length === 0 ? (
+                    <div className="p-8 text-center text-gray-400">
+                      <CheckCircle2 className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">暂无数据</p>
+                    </div>
+                  ) : (
+                    getFilteredRsvpList().map((item) => {
+                      if (item.type === 'guest') {
+                        const guest = item.data;
+                        const seatLabel = plan.furniture.find(f => f.id === guest.seatId)?.label || '未安排';
+                        return (
+                          <div key={guest.id} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-gray-800 text-sm">
+                                    {guest.name}
+                                    {guest.isVip && <span className="ml-1 text-amber-500 text-xs">VIP</span>}
+                                  </p>
+                                  <p className="text-xs text-gray-400">座位：{seatLabel}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleCopyReminder(guest)}
+                                className={cn(
+                                  'px-2 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1 flex-shrink-0',
+                                  copiedRsvpId === guest.id
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                )}
+                              >
+                                {copiedRsvpId === guest.id ? (
+                                  <><Check className="w-3.5 h-3.5" />已复制</>
+                                ) : (
+                                  <><Copy className="w-3.5 h-3.5" />提醒话术</>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        const rsvp = item.data;
+                        return (
+                          <div key={rsvp.id} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className={cn(
+                                  'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                                  rsvp.attending ? 'bg-green-100' : 'bg-rose-100'
+                                )}>
+                                  {rsvp.attending ? (
+                                    <UserCheck className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <UserX className="w-4 h-4 text-rose-500" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-gray-800 text-sm truncate">
+                                    {rsvp.guestName}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    {new Date(rsvp.submittedAt).toLocaleString('zh-CN')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <span className={cn(
+                                  'inline-block px-2 py-0.5 rounded-full text-xs font-medium',
+                                  rsvp.attending
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-rose-100 text-rose-700'
+                                )}>
+                                  {rsvp.attending ? `出席 ${rsvp.guestCount}人` : '无法出席'}
+                                </span>
+                              </div>
+                            </div>
+                            {rsvp.message && (
+                              <div className="mt-2 ml-10 bg-gray-50 rounded-lg p-2">
+                                <p className="text-sm text-gray-600">💌 {rsvp.message}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                    })
                   )}
                 </div>
               )}

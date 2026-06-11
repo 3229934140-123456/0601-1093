@@ -58,7 +58,7 @@ export const generateShareLink = (plan: WeddingPlan): string => {
 export const generateGuestShareLink = (plan: WeddingPlan, guest: Guest): string => {
   const baseUrl = window.location.origin;
   const encodedData = encodePlanData(plan);
-  return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guest=${encodeURIComponent(guest.name)}`;
+  return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guestId=${encodeURIComponent(guest.id)}&guest=${encodeURIComponent(guest.name)}`;
 };
 
 export const generateLightweightShareLink = (plan: WeddingPlan, guest?: Guest): string => {
@@ -92,7 +92,7 @@ export const generateLightweightShareLink = (plan: WeddingPlan, guest?: Guest): 
     const encodedData = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     
     if (guest) {
-      return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guest=${encodeURIComponent(guest.name)}`;
+      return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}&guestId=${encodeURIComponent(guest.id)}&guest=${encodeURIComponent(guest.name)}`;
     }
     return `${baseUrl}/invite/${plan.id}?data=${encodeURIComponent(encodedData)}`;
   } catch (error) {

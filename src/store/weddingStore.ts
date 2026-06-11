@@ -718,18 +718,40 @@ export const useWeddingStore = create<WeddingStore>()(
           const plan = state.plans[planId];
           if (!plan) return state;
 
-          const newResponse: RsvpResponse = {
-            ...response,
-            id: generateId(),
-            submittedAt: new Date().toISOString(),
-          };
+          const existingIndex = plan.rsvpResponses.findIndex((r) =>
+            response.guestId
+              ? r.guestId === response.guestId
+              : r.guestName === response.guestName
+          );
+
+          let newResponses: RsvpResponse[];
+          
+          if (existingIndex >= 0) {
+            newResponses = plan.rsvpResponses.map((r, i) =>
+              i === existingIndex
+                ? {
+                    ...r,
+                    ...response,
+                    id: r.id,
+                    submittedAt: new Date().toISOString(),
+                  }
+                : r
+            );
+          } else {
+            const newResponse: RsvpResponse = {
+              ...response,
+              id: generateId(),
+              submittedAt: new Date().toISOString(),
+            };
+            newResponses = [...plan.rsvpResponses, newResponse];
+          }
 
           return {
             plans: {
               ...state.plans,
               [planId]: {
                 ...plan,
-                rsvpResponses: [...plan.rsvpResponses, newResponse],
+                rsvpResponses: newResponses,
                 updatedAt: new Date().toISOString(),
               },
             },

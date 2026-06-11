@@ -533,16 +533,24 @@ export default function GuestInvitePage() {
       setPlanLoaded(true);
       
       if (loadedPlan) {
+        const guestIdParam = searchParams.get('guestId');
         const guestParam = searchParams.get('guest');
-        if (guestParam && loadedPlan.guests) {
-          const foundGuest = loadedPlan.guests.find(
+        let foundGuest: Guest | undefined;
+        
+        if (guestIdParam && loadedPlan.guests) {
+          foundGuest = loadedPlan.guests.find(
+            (g) => g.id === decodeURIComponent(guestIdParam)
+          );
+        }
+        
+        if (!foundGuest && guestParam && loadedPlan.guests) {
+          foundGuest = loadedPlan.guests.find(
             (g) => g.name.toLowerCase() === decodeURIComponent(guestParam).toLowerCase()
           );
-          if (foundGuest) {
-            setCurrentGuest(foundGuest);
-          } else {
-            setShowIdentityModal(true);
-          }
+        }
+        
+        if (foundGuest) {
+          setCurrentGuest(foundGuest);
         } else {
           setShowIdentityModal(true);
         }
